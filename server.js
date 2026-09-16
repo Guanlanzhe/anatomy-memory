@@ -144,3 +144,14 @@ app.get('/api/fsrs-state', (req, res) => {
 app.listen(PORT, () => {
   console.log(`\nAnatomy Memory running at http://localhost:${PORT}\n`);
 });
+
+
+const PORT = process.env.PORT || 3000;
+
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Anatomy Memory running at http://localhost:${PORT}`);
+  });
+}
+
+export default app;
