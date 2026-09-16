@@ -24,6 +24,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const PORT = 3000;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -143,9 +144,6 @@ app.get('/api/fsrs-state', (req, res) => {
 app.listen(PORT, () => {
   console.log(`\nAnatomy Memory running at http://localhost:${PORT}\n`);
 });
-
-
-const PORT = process.env.PORT || 3000;
 
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
