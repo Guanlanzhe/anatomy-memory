@@ -1,0 +1,6 @@
+﻿node_modules/
+data/learning_state.json
+.env
+*.bak
+*.bak2
+.DS_Store

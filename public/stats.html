@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>学习统计 · Anatomy Memory</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="header">
+    <h1>学习统计</h1>
+    <a href="/">← 返回主页</a>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <div class="section-title">总体</div>
+      <div id="overview">加载中…</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">按题型统计</div>
+      <div id="by-mode">加载中…</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">最薄弱的词根</div>
+      <p style="font-size:13px;color:#888;margin-top:0">按 Again 次数排序</p>
+      <div id="weak-morphemes">加载中…</div>
+    </div>
+  </div>
+
+  <script>
+    Promise.all([
+      fetch('/api/stats').then((r) => r.json()),
+      fetch('/api/fsrs-state').then((r) => r.json()),
+      fetch('/api/morphemes').then((r) => r.json())
+    ]).then(([stats, fsrsState, morphemes]) => {
+      document.getElementById('overview').innerHTML = `
+        <p style="margin:0;line-height:1.9;font-size:14px">
+          总卡片数：<strong>${stats.total}</strong><br>
+          今日到期：<strong>${stats.due}</strong><br>
+          学习中：<strong>${stats.learning}</strong> &nbsp;·&nbsp; 复习中：<strong>${stats.review}</strong>
+        </p>
+      `;
+
+      const modeLabels = {
+        'meaning-to-term': '中文 → 英文',
+        'term-to-meaning': '英文 → 中文',
+        'morpheme-meaning': '词根含义',
+        'decomposition': '拆解词根',
+        'construction': '拼装术语',
+        'anatomy-mapping': '解剖结构'
+      };
+      const modeEntries = Object.entries(stats.modeCount || {});
+      if (modeEntries.length === 0) {
+        document.getElementById('by-mode').textContent = '还没有数据';
+      } else {
+        document.getElementById('by-mode').innerHTML = modeEntries
+          .map(([mode, count]) => `<div style="margin:4px 0;font-size:14px">${modeLabels[mode] || mode}：<strong>${count}</strong> 张</div>`)
+          .join('');
+      }
+
+      // 统计词根卡的 lapses（reps 中的 again）
+      const morphemeScores = {};
+      for (const [cardId, card] of Object.entries(fsrsState)) {
+        const parts = cardId.split(':');
+        if (parts.length !== 2) continue;
+        const [name, mode] = parts;
+        if (mode !== 'meaning') continue;
+        if (!morphemes[name]) continue;
+
+        morphemeScores[name] = morphemeScores[name] || { lapses: 0, reps: 0 };
+        morphemeScores[name].lapses += card.lapses || 0;
+        morphemeScores[name].reps += card.reps || 0;
+      }
+
+      const sorted = Object.entries(morphemeScores)
+        .filter(([, s]) => s.reps > 0)
+        .sort((a, b) => (b[1].lapses / b[1].reps) - (a[1].lapses / a[1].reps))
+        .slice(0, 10);
+
+      if (sorted.length === 0) {
+        document.getElementById('weak-morphemes').textContent = '还没有练习数据';
+      } else {
+        document.getElementById('weak-morphemes').innerHTML = sorted
+          .map(([name, s]) => {
+            const rate = ((s.lapses / s.reps) * 100).toFixed(0);
+            const bar = '█'.repeat(Math.round(s.lapses / s.reps * 20));
+            return `<div style="margin:6px 0;font-size:14px">
+              <strong>${name}</strong> · ${morphemes[name].chinese || morphemes[name].meaning}
+              <span style="color:#c62828">${bar}</span>
+              <span style="color:#888">${rate}% 遗忘率（${s.lapses}/${s.reps}）</span>
+            </div>`;
+          })
+          .join('');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>练习 · Anatomy Memory</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="header">
+    <h1>练习模式</h1>
+    <a href="/">← 返回主页</a>
+  </div>
+
+  <div class="container">
+
+    <!-- Setup 阶段 -->
+    <div id="setup-view">
+      <div class="card">
+        <div class="section-title">第一步：选择章节（可多选）</div>
+        <div style="margin-bottom:12px">
+          <button class="secondary" onclick="selectAllChapters(true)">全选</button>
+          <button class="secondary" onclick="selectAllChapters(false)">清空</button>
+        </div>
+        <div id="chapters-list" class="checkbox-grid"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">第二步：选择术语（可多选，会随章节变化）</div>
+        <div style="margin-bottom:12px">
+          <button class="secondary" onclick="selectAllTerms(true)">全选</button>
+          <button class="secondary" onclick="selectAllTerms(false)">清空</button>
+        </div>
+        <div id="terms-list" class="checkbox-grid" style="max-height:400px;overflow-y:auto"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">第三步：选择题型（可多选）</div>
+        <div id="modes-list" class="checkbox-grid"></div>
+      </div>
+
+      <div class="card">
+        <button id="start-btn" onclick="startPractice()">开始练习</button>
+        <span id="setup-hint" style="margin-left:12px;color:#888;font-size:13px"></span>
+      </div>
+    </div>
+
+    <!-- 练习阶段 -->
+    <div id="quiz-view" style="display:none">
+      <div class="progress-bar"><div class="progress-bar-inner" id="progress"></div></div>
+
+      <div class="card">
+        <div style="margin-bottom:12px">
+          <span class="badge" id="mode-badge"></span>
+          <span id="counter" style="color:#888;font-size:13px"></span>
+        </div>
+        <div class="question-prompt" id="prompt"></div>
+        <input type="text" id="answer" placeholder="输入答案，回车提交" autocomplete="off">
+        <div id="feedback"></div>
+      </div>
+
+      <div class="card" id="post-answer" style="display:none">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span id="auto-rating" style="font-size:14px;color:#666"></span>
+          <button class="secondary" onclick="toggleRatingOverride()" style="font-size:13px;padding:6px 12px">纠正评分</button>
+          <button onclick="skipDelay()" style="font-size:13px;padding:6px 12px">下一题</button>
+        </div>
+        <div id="rating-override" style="display:none;margin-top:12px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="secondary" onclick="rate('again')">Again · 忘了</button>
+            <button class="secondary" onclick="rate('hard')">Hard · 很难</button>
+            <button class="secondary" onclick="rate('good')">Good · 正常</button>
+            <button class="secondary" onclick="rate('easy')">Easy · 太简单</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="done-card" style="display:none">
+        <div class="section-title">练习完成</div>
+        <p id="summary"></p>
+        <button onclick="location.reload()">再来一轮</button>
+        <a href="/" style="margin-left:12px"><button class="secondary">回主页</button></a>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/practice.js"></script>
+</body>
+</html>

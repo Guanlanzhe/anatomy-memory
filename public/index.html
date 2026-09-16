@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>Anatomy Memory</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="header">
+    <h1>Anatomy Memory</h1>
+  </div>
+
+  <div class="container">
+    <div class="mode-entry">
+      <a class="mode-card" href="/graph.html">
+        <div class="icon">🕸</div>
+        <h2>知识图谱</h2>
+        <p>查看术语、词根、解剖结构之间的关系网络。支持拖拽、缩放、点击查看详情。</p>
+      </a>
+
+      <a class="mode-card" href="/practice.html">
+        <div class="icon">📝</div>
+        <h2>练习模式</h2>
+        <p>自己选择要练的术语和题型，动态生成题目。答完后用 FSRS 安排下次复习。</p>
+      </a>
+    </div>
+
+    <div class="card" id="due-card" style="margin-top:24px;display:none">
+      <div class="section-title">今日复习</div>
+      <p style="margin:0 0 16px 0;font-size:15px">
+        你有 <strong id="due-count">0</strong> 张卡到期。
+      </p>
+      <button onclick="startDuePractice()">开始复习</button>
+    </div>
+
+    <div class="card" style="margin-top:24px">
+      <div class="section-title">学习状态</div>
+      <div id="stats">加载中…</div>
+      <div style="margin-top:12px">
+        <a href="/stats.html" style="color:#4A90E2;font-size:14px;text-decoration:none">查看详细统计 →</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    fetch('/api/stats')
+      .then((r) => r.json())
+      .then((s) => {
+        document.getElementById('stats').innerHTML = `
+          <p style="margin:0;line-height:1.8">
+            总卡片数：<strong>${s.total}</strong><br>
+            今日到期：<strong>${s.due}</strong><br>
+            学习中：<strong>${s.learning}</strong> &nbsp;·&nbsp; 复习中：<strong>${s.review}</strong>
+          </p>
+        `;
+
+        if (s.due > 0) {
+          document.getElementById('due-count').textContent = s.due;
+          document.getElementById('due-card').style.display = 'block';
+        }
+      });
+
+    function startDuePractice() {
+      fetch('/api/due')
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.count === 0) {
+            alert('没有到期的卡片');
+            return;
+          }
+          const ids = data.cards.map((c) => c.cardId);
+          sessionStorage.setItem('dueCards', JSON.stringify(ids));
+          location.href = '/practice.html?due=1';
+        });
+    }
+  </script>
+</body>
+</html>

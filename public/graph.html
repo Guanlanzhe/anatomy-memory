@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>知识图谱 · Anatomy Memory</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+  <style>
+    body { margin: 0; }
+    .toolbar {
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .toolbar label { font-size: 13px; color: #555; }
+    .toolbar select, .toolbar input[type="text"] {
+      padding: 6px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      background: #fff;
+    }
+    .toolbar input[type="text"] { width: 180px; }
+    .tab {
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      background: #e5e7eb;
+      color: #333;
+      border: none;
+      font-family: inherit;
+    }
+    .tab.active { background: #4A90E2; color: #fff; }
+    #cy { width: 100vw; height: calc(100vh - 105px); }
+    .legend {
+      position: absolute; bottom: 16px; left: 16px;
+      background: rgba(255,255,255,0.95); padding: 10px 14px; border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08); font-size: 13px;
+    }
+    .legend div { margin: 3px 0; }
+    .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    #detail {
+      position: absolute; top: 120px; right: 16px;
+      width: 280px; background: rgba(255,255,255,0.98);
+      border-radius: 8px; padding: 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+      font-size: 13px; display: none; line-height: 1.6;
+    }
+    #detail h3 { margin: 0 0 8px 0; font-size: 15px; }
+    #detail .close { float: right; cursor: pointer; color: #888; font-size: 18px; }
+    #stats-label { font-size: 12px; color: #888; margin-left: auto; }
+
+    /* 词根搜索结果列表 */
+    #morpheme-results {
+      position: absolute;
+      background: #fff;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      max-height: 300px;
+      overflow-y: auto;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      z-index: 100;
+      font-size: 13px;
+      min-width: 220px;
+      display: none;
+    }
+    #morpheme-results .item {
+      padding: 6px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    #morpheme-results .item:hover, #morpheme-results .item.highlight {
+      background: #e8f0fe;
+    }
+    #morpheme-results .item .id { font-weight: 600; }
+    #morpheme-results .item .meaning { color: #888; margin-left: 6px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>知识图谱</h1>
+    <a href="/">← 返回主页</a>
+  </div>
+
+  <div class="toolbar">
+    <button class="tab active" data-mode="chapter" onclick="switchMode('chapter')">按章节</button>
+    <button class="tab" data-mode="morpheme" onclick="switchMode('morpheme')">按词根</button>
+
+    <div id="chapter-controls">
+      <label>章节：</label>
+      <select id="chapter-select" onchange="reload()"></select>
+    </div>
+
+    <div id="morpheme-controls" style="display:none;position:relative">
+      <label>词根：</label>
+      <input type="text" id="morpheme-search" placeholder="输入词根或中文搜索…" autocomplete="off">
+      <div id="morpheme-results"></div>
+      <span id="morpheme-selected" style="margin-left:8px;color:#4A90E2;font-size:13px"></span>
+    </div>
+
+    <span id="stats-label"></span>
+  </div>
+
+  <div id="cy"></div>
+
+  <div class="legend">
+    <div><span class="dot" style="background:#4A90E2"></span>Term</div>
+    <div><span class="dot" style="background:#F5A623"></span>Morpheme</div>
+  </div>
+
+  <div id="detail">
+    <span class="close" onclick="document.getElementById('detail').style.display='none'">×</span>
+    <div id="detail-content"></div>
+  </div>
+
+  <script>
+    let cy = null;
+    let currentMode = 'chapter';
+    let chapters = [];
+    let morphemes = {};
+    let selectedMorpheme = null;
+    let searchHighlight = -1;
+
+    function switchMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.tab').forEach((t) => {
+        t.classList.toggle('active', t.dataset.mode === mode);
+      });
+      document.getElementById('chapter-controls').style.display = mode === 'chapter' ? '' : 'none';
+      document.getElementById('morpheme-controls').style.display = mode === 'morpheme' ? '' : 'none';
+      if (mode === 'chapter') {
+        reload();
+      } else if (selectedMorpheme) {
+        reload();
+      }
+    }
+
+    async function init() {
+      const [ch, mp] = await Promise.all([
+        fetch('/api/chapters').then((r) => r.json()),
+        fetch('/api/morphemes').then((r) => r.json())
+      ]);
+      chapters = ch;
+      morphemes = mp;
+
+      document.getElementById('chapter-select').innerHTML = chapters
+        .map((c) => `<option value="${c}">${c}</option>`)
+        .join('');
+
+      // 绑定词根搜索
+      const input = document.getElementById('morpheme-search');
+      const results = document.getElementById('morpheme-results');
+
+      input.addEventListener('input', () => {
+        renderMorphemeResults(input.value);
+      });
+      input.addEventListener('focus', () => {
+        if (input.value) renderMorphemeResults(input.value);
+      });
+      input.addEventListener('keydown', (e) => {
+        const items = results.querySelectorAll('.item');
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          searchHighlight = Math.min(searchHighlight + 1, items.length - 1);
+          updateHighlight(items);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          searchHighlight = Math.max(searchHighlight - 1, 0);
+          updateHighlight(items);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          const item = items[searchHighlight] || items[0];
+          if (item) {
+            pickMorpheme(item.dataset.id);
+          }
+        } else if (e.key === 'Escape') {
+          results.style.display = 'none';
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!document.getElementById('morpheme-controls').contains(e.target)) {
+          results.style.display = 'none';
+        }
+      });
+
+      await reload();
+    }
+
+    function renderMorphemeResults(query) {
+      const results = document.getElementById('morpheme-results');
+      const q = query.trim().toLowerCase();
+
+      if (!q) {
+        results.style.display = 'none';
+        return;
+      }
+
+      const matches = Object.entries(morphemes)
+        .filter(([id, m]) => {
+          if (id.toLowerCase().includes(q)) return true;
+          if (m.meaning && m.meaning.toLowerCase().includes(q)) return true;
+          if (m.chinese && m.chinese.includes(q)) return true;
+          return false;
+        })
+        .slice(0, 30);
+
+      if (matches.length === 0) {
+        results.innerHTML = '<div class="item" style="color:#999;cursor:default">没有匹配的词根</div>';
+        results.style.display = 'block';
+        return;
+      }
+
+      results.innerHTML = matches
+        .map(
+          ([id, m]) =>
+            `<div class="item" data-id="${id}">
+              <span class="id">${id}</span>
+              <span class="meaning">${m.chinese || ''} ${m.meaning ? '· ' + m.meaning : ''}</span>
+            </div>`
+        )
+        .join('');
+
+      results.querySelectorAll('.item').forEach((el) => {
+        el.addEventListener('click', () => {
+          if (el.dataset.id) pickMorpheme(el.dataset.id);
+        });
+      });
+
+      searchHighlight = 0;
+      updateHighlight(results.querySelectorAll('.item'));
+      results.style.display = 'block';
+    }
+
+    function updateHighlight(items) {
+      items.forEach((el, i) => {
+        el.classList.toggle('highlight', i === searchHighlight);
+      });
+    }
+
+    function pickMorpheme(id) {
+      selectedMorpheme = id;
+      document.getElementById('morpheme-search').value = id;
+      document.getElementById('morpheme-results').style.display = 'none';
+      document.getElementById('morpheme-selected').textContent = '';
+      reload();
+    }
+
+    async function reload() {
+      let url = '/api/graph';
+      if (currentMode === 'chapter') {
+        const c = document.getElementById('chapter-select').value;
+        if (c) url += `?chapter=${encodeURIComponent(c)}`;
+      } else {
+        if (!selectedMorpheme) {
+          document.getElementById('stats-label').textContent = '请先搜索并选择一个词根';
+          if (cy) { cy.destroy(); cy = null; }
+          return;
+        }
+        url += `?morpheme=${encodeURIComponent(selectedMorpheme)}`;
+      }
+
+      const data = await fetch(url).then((r) => r.json());
+
+      document.getElementById('stats-label').textContent =
+        `${data.nodes.length} 节点 · ${data.edges.length} 边`;
+
+      if (cy) cy.destroy();
+
+      cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements: [...data.nodes, ...data.edges],
+        style: [
+          { selector: 'node[type="term"]', style: { 'background-color': '#4A90E2', 'label': 'data(label)', 'color': '#fff', 'text-valign': 'center', 'text-halign': 'center', 'font-size': 10, 'width': 55, 'height': 55, 'text-wrap': 'wrap', 'text-max-width': 50 } },
+          { selector: 'node[type="morpheme"]', style: { 'background-color': '#F5A623', 'label': 'data(label)', 'color': '#fff', 'text-valign': 'center', 'text-halign': 'center', 'font-size': 10, 'width': 45, 'height': 45 } },
+          { selector: 'edge', style: { 'width': 1.3, 'line-color': '#bbb', 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'target-arrow-color': '#bbb', 'arrow-scale': 0.6 } }
+        ],
+        layout: { name: 'cose', animate: false, nodeRepulsion: 8000, idealEdgeLength: 80 }
+      });
+
+      cy.on('tap', 'node', (evt) => {
+        const d = evt.target.data();
+        let html = `<h3>${d.label}</h3>`;
+        if (d.chinese) html += `<div>中文：${d.chinese}</div>`;
+        if (d.type === 'morpheme') html += `<div>含义：${d.meaning || '—'}</div>`;
+        if (d.chapter) html += `<div>章节：${d.chapter}</div>`;
+        html += `<div style="margin-top:8px;color:#888;font-size:12px">类型：${d.type}</div>`;
+        document.getElementById('detail-content').innerHTML = html;
+        document.getElementById('detail').style.display = 'block';
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
